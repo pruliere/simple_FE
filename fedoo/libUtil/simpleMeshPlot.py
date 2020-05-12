@@ -16,13 +16,13 @@ from fedoo.libConstitutiveLaw import ConstitutiveLaw
 
 
 
-def meshPlot2d(meshID, disp=None, data=None, scale_factor = 1, plot_edge = True, nb_level = 6):
+def meshPlot2d(mesh, disp=None, data=None, data_min=None,data_max=None, scale_factor = 1, plot_edge = True, nb_level = 6):
     """
     Simple function for ploting 2D mesh with node data and node displacement
     
     Parameters
     ----------
-    meshID : TYPE
+    mesh : TYPE
         DESCRIPTION.
     disp : TYPE
         DESCRIPTION.
@@ -43,7 +43,8 @@ def meshPlot2d(meshID, disp=None, data=None, scale_factor = 1, plot_edge = True,
     # Create triangulation.
     color = plt.cm.hsv
 
-    mesh = Mesh.GetAll()[meshID]
+    if isinstance(mesh, str): mesh = Mesh.GetAll()[mesh]
+
     crd = mesh.GetNodeCoordinates()
     elm = mesh.GetElementTable()
     type_el = mesh.GetElementShape()
@@ -68,7 +69,12 @@ def meshPlot2d(meshID, disp=None, data=None, scale_factor = 1, plot_edge = True,
     ax = fig.gca()
     
     if data is not None:
-        plt.tricontourf(triang, data, nb_level, cmap=color)
+        if data_min is None and data_max is None: 
+            plt.tricontourf(triang, data, nb_level, cmap=color)
+        else:
+            if data_min is None: data_min = data.min()
+            if data_max is None: data_max = data.max()
+            plt.tricontourf(triang, data, vmax=data_max, levels = np.linspace(data_min,data_max,nb_level),extend = 'both', cmap=color)        
         
     if plot_edge == True:
         if type_el in ['tri3', 'tri6']:
@@ -87,8 +93,7 @@ def meshPlot2d(meshID, disp=None, data=None, scale_factor = 1, plot_edge = True,
             ax.set_xlim(crd_scaled[:,0].min(), crd_scaled[:,0].max())
             ax.set_ylim(crd_scaled[:,1].min(), crd_scaled[:,1].max())           
     
-    
-            
+                
     ax.set_aspect('equal')
     # ax.set_title('Stress')
     # ax = fig.gca()
@@ -96,22 +101,30 @@ def meshPlot2d(meshID, disp=None, data=None, scale_factor = 1, plot_edge = True,
     # fig, ax = plt.subplots()
     if data is not None:
         plt.colorbar(orientation = "horizontal")
+        # plt.clim(data_min, data_max)
     plt.xlabel('x')
     plt.ylabel('y')
     # plt.ion()
     
     
-def fieldPlot2d(meshID, MatID, disp, dataID=None, component=0, scale_factor = 1, plot_edge = True, nb_level = 6, type_plot = "real"):
+def fieldPlot2d(mesh, MatID, disp, dataID=None, component=0, data_min=None,data_max=None, scale_factor = 1, plot_edge = True, nb_level = 6, type_plot = "real"):
+
+    if isinstance(mesh, str): mesh = Mesh.GetAll()[mesh]
+
     #type_plot is "real" or "smooth"
     if dataID is None: # no data, just plot mesh
-        meshPlot2d(mesh, disp, None, scale_factor, plot_edge, nb_level)
+        meshPlot2d(mesh, disp, None, None, None, scale_factor, plot_edge, nb_level)
         return    
     elif dataID.lower() == 'disp': #if data is disp, no difference between "real" and "smooth" plot
-        meshPlot2d(mesh, disp, disp.reshape(2,-1)[component], scale_factor, plot_edge, nb_level)
-        ax.set_title(dataID+'_'+str(component))
+        try:
+            meshPlot2d(mesh, disp, disp.reshape(2,-1)[component], data_min,data_max, scale_factor, plot_edge, nb_level)
+        except: 
+            raise NameError('DataID: '+ str(dataID)+ ' and component: '+ str(component)+" doesn't exist")    
+        
+        plt.gca().set_title(dataID+'_'+str(component))
         return
     
-    mesh = Mesh.GetAll()[meshID]
+    if isinstance(mesh,str): mesh = Mesh.GetAll()[mesh]
     crd = mesh.GetNodeCoordinates()
     elm = mesh.GetElementTable()
     type_el = mesh.GetElementShape()
@@ -134,12 +147,18 @@ def fieldPlot2d(meshID, MatID, disp, dataID=None, component=0, scale_factor = 1,
     TensorStrain = Assembly.GetAll()['visu'].GetStrainTensor(U, "Nodal", nlgeom = False)       
     TensorStress = ConstitutiveLaw.GetAll()[MatID].GetStress(TensorStrain)
     
-    if dataID.lower() == 'stress':
-        data=TensorStress[component]
-    elif dataID.lower() == 'strain':
-        data = TensorStrain[component]
+    try:
+        if dataID.lower() == 'stress':
+            if isinstance(component,str) and component.lower()=='vm':
+                data=TensorStress.vonMises()
+            else: 
+                data=TensorStress[component]            
+        elif dataID.lower() == 'strain':
+            data = TensorStrain[component]
+    except: 
+        raise NameError('DataID: '+ str(dataID)+ ' and component: '+ str(component)+" doesn't exist")
     
-    meshPlot2d('visu', U, data, scale_factor, plot_edge, nb_level)
+    meshPlot2d('visu', U, data, data_min, data_max, scale_factor, plot_edge, nb_level)
     
     # # Create triangulation.
     # color = plt.cm.hsv
